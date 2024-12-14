@@ -1,9 +1,0 @@
-apiVersion: kafka.strimzi.io/v1beta1
-kind: KafkaTopic
-metadata:
-  name: foobar
-  labels:
-    strimzi.io/cluster: managed-kafka
-spec:
-  partitions: 1
-  replicas: 1

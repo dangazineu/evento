@@ -1,3 +1,0 @@
-This folder still needs some cleaning and refactoring. At the end of the day, each file only has a different set of
-```kubectl apply``` commands, tailored for a different step in the app development / debugging process. Naming of each
-script is inspired by Maven goals, but this should be revised as deploy and install mean completely different things here.
