@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# dev/setup: Teardown and recreate evento namespace in Kubernetes, applies relevant operators.
+
+set -e
+cd "$(dirname "$0")/.."
+source dev/.functions.sh
+
+NAMESPACE=$(print_namespace "$@")
+DOMAIN=$(print_domain "$@")
+ENTITY=$(print_entity "$@")
+
+# if argument --skipNamespace is provided, won't teardown existing setup
+# only creates new topics for the entity
+if ! $(array_contains "--skipNamespace" "$@"); then
+  if kubectl get namespace "$NAMESPACE" > /dev/null 2>&1; then
+    kubectl delete namespace "$NAMESPACE"
+  fi
+  kubectl create namespace "$NAMESPACE"
+  kubectl -n "$NAMESPACE" apply -f "https://strimzi.io/install/latest?namespace=$NAMESPACE"  > /dev/null
+
+  # FIXME this should be doable with a combination of applying
+  #  https://strimzi.io/examples/latest/kafka/kafka-persistent-single.yaml
+  #  and then patching it to include the nodeport configuration.
+  kubectl -n "$NAMESPACE" apply -f dev/resources/kafka-cluster.yaml > /dev/null
+  kubectl -n "$NAMESPACE" wait kafka/kafka-cluster --for=condition=Ready --timeout=300s > /dev/null
+
+  export KAFKA_BOOTSTRAP_SERVERS=$(print_kafka_bootstrap_servers "$NAMESPACE")
+fi
+
+TOPIC_PREFIX="$DOMAIN-$ENTITY"
+for topic in "events" "commands" ; do
+  topic_name=$(echo "$TOPIC_PREFIX-$topic" | tr '[:upper:]' '[:lower:]')
+  if kubectl -n "$NAMESPACE" get kafkatopic "$topic_name" > /dev/null 2>&1; then
+    kubectl -n "$NAMESPACE" delete kafkatopic "$topic_name"
+  fi
+
+  cat << EOF | kubectl create -n "$NAMESPACE" -f -
+apiVersion: kafka.strimzi.io/v1beta1
+kind: KafkaTopic
+metadata:
+  name: "$topic_name"
+  labels:
+    strimzi.io/cluster: "kafka-cluster"
+spec:
+  partitions: 1
+  replicas: 1
+EOF
+done
+
+# curl -sSL https://raw.githubusercontent.com/apicurio/apicurio-registry-operator/master/docs/resources/install.yaml | sed "s/{NAMESPACE}/foobar/g" | kubectl install -n foobar -f -
+# kubectl -n foobar expose deployment/apicurioregistry-deployment-2m4cg  --type="NodePort"
+kubectl  -n "$NAMESPACE" run apicurio-registry --image=docker.io/apicurio/apicurio-registry-mem:latest --port=8080
+kubectl  -n "$NAMESPACE" expose pod/apicurio-registry --type="NodePort"
+export APICURIO_URL=$(minikube -n "$NAMESPACE" service apicurio-registry --url)
+
+echo "Environment setup! If you haven't sourced this script, make sure to run: "
+echo "export KAFKA_BOOTSTRAP_SERVERS=$KAFKA_BOOTSTRAP_SERVERS"
+echo "export APICURIO_URL=$APICURIO_URL"

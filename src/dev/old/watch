@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# dev/watch events|commands: Watches either the commands or events topic
+
+set -e
+cd "$(dirname "$0")/.."
+source dev/.functions.sh
+
+if [ $# -lt 1 ]; then
+  echo "Expected one argument with the name of the topic to watch"
+  exit 1
+fi
+
+NAMESPACE=$(print_namespace "$@")
+RESOURCE_PREFIX=$(print_resource_prefix "$@")
+TOPIC="$RESOURCE_PREFIX-$1"
+
+echo "Will listen to topic $TOPIC on k8s namespace $NAMESPACE"
+kubectl -n "$NAMESPACE" run kafka-consumer \
+  -ti \
+  --image=strimzi/kafka:0.19.0-kafka-2.5.0 \
+  --rm=true \
+  --restart=Never \
+  -- bin/kafka-console-consumer.sh \
+  --bootstrap-server \
+  kafka-cluster-kafka-bootstrap:9092 \
+  --topic "$TOPIC" \
+  --from-beginning
+
+
+
+
+kubectl -n evento-master run kafka-consumer \
+  -ti \
+  --image=strimzi/kafka:0.19.0-kafka-2.5.0 \
+  --rm=true \
+  --restart=Never \
+  -- bin/kafka-console-consumer.sh \
+  --bootstrap-server \
+  managed-kafka-kafka-bootstrap:9092 \
+  --topic "foobar" \
+  --from-beginning
+
+kubectl -n evento-master run kafka-producer \
+  -ti \
+  --image=strimzi/kafka:0.19.0-kafka-2.5.0 \
+  --rm=true \
+  --restart=Never \
+  -- bin/kafka-console-producer.sh \
+  --broker-list managed-kafka-kafka-bootstrap:9092 \
+  --topic foobar
+
+  bin/kafka-console-producer.sh --broker-list <node-address>:<node-port> --topic my-topic

@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# dev/debug cmd|entt|mng: Starts a dataplane service in debug mode locally.
+
+set -e
+cd "$(dirname "$0")/.."
+source dev/.functions.sh
+
+DATAPLANE_MODULES=($(print_dataplane_executable_modules_from_list "$@"))
+if [ "${#DATAPLANE_MODULES[@]}" -ne 1 ]; then
+  echo "Must specify exactly one dataplane module."
+  exit 1
+fi
+
+application_path="data-plane/${DATAPLANE_MODULES[0]}"
+
+if ! $(array_contains "--skipBuild" "$@"); then
+  build_file="build-${DATAPLANE_MODULES[0]}.log"
+  rm "$build_file" > /dev/null 2>&1 || true
+
+  # TODO make all this log suppression configurable
+  echo "Building project. Build output will be written to $build_file to reduce verbosity."
+  mvn clean package -pl ".,data-plane,$application_path" > "$build_file"
+fi
+
+NAMESPACE=$(print_namespace "$@")
+RESOURCE_PREFIX=$(print_resource_prefix "$@")
+
+export EVENTS_TOPIC="$RESOURCE_PREFIX-events"
+export COMMANDS_TOPIC="$RESOURCE_PREFIX-commands"
+export KAFKA_BOOTSTRAP_SERVERS=$(print_kafka_bootstrap_servers "$NAMESPACE")
+export QUARKUS_HTTP_PORT=$(print_available_local_port)
+echo "Starting service on http://localhost:$QUARKUS_HTTP_PORT"
+echo "Connecting events to $EVENTS_TOPIC"
+echo "Connecting commands to $COMMANDS_TOPIC"
+if [ "${DATAPLANE_MODULES[0]}" != "entity-service" ]; then
+  export ENTITY_SERVICE_HOST=$(minikube -n "$NAMESPACE" service "$RESOURCE_PREFIX-entity-service" --url | awk -F[/:] '{print $4}')
+  export ENTITY_SERVICE_PORT=$(minikube -n "$NAMESPACE" service "$RESOURCE_PREFIX-entity-service" --url | awk -F[/:] '{print $5}')
+  echo "Connecting entity-service to $ENTITY_SERVICE_HOST:$ENTITY_SERVICE_PORT"
+fi
+
+mvn -q quarkus:dev \
+  -pl "$application_path" \
+  -Ddebug=$(print_available_local_port "$QUARKUS_HTTP_PORT")\
+  -Dquarkus.log.level=WARN

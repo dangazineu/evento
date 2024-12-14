@@ -1,0 +1,19 @@
+apiVersion: evento.dev/v1alpha1
+kind: Context
+metadata:
+  name: banking
+  labels:
+    evento.dev/cluster: {CLUSTER}
+spec:
+  objectTypes:
+    - name: Withdrawal
+      doc: Describes a withdrawal.
+      fields:
+        - name: value
+          doc: This is the field that describes the value to be withdrawn.
+          primitiveType: type_double
+    - name: Deposit
+      doc: Describes a deposit.
+      fields:
+        - name: value
+          customType: foobars

@@ -1,0 +1,58 @@
+#!/bin/bash
+
+set -e
+cd "$(dirname "$0")/.."
+source dev/.functions.sh
+
+if [ -z "$QUARKUS_CONTAINER_IMAGE_GROUP" ]; then
+  echo "\$QUARKUS_CONTAINER_IMAGE_GROUP must be set"
+  exit 1
+fi
+if [ -z "$QUARKUS_CONTAINER_IMAGE_USERNAME" ]; then
+  echo "\$QUARKUS_CONTAINER_IMAGE_USERNAME must be set"
+  exit 1
+fi
+if [ -z "$QUARKUS_CONTAINER_IMAGE_PASSWORD" ]; then
+  echo "\$QUARKUS_CONTAINER_IMAGE_PASSWORD must be set"
+  exit 1
+fi
+
+#DATAPLANE_MODULES=($(print_dataplane_executable_modules_from_list "$@"))
+#if [ "${#DATAPLANE_MODULES[@]}" -eq 0 ]; then
+#  DATAPLANE_MODULES=($(print_dataplane_executable_modules))
+#fi
+
+NAMESPACE=$(print_namespace "$@")
+#RESOURCE_PREFIX=$(print_resource_prefix "$@")
+
+MODULE="evento-operator"
+if ! $(array_contains "--skipBuild" "$@"); then
+
+  MVN_ARGS=" clean package -pl .,control-plane,control-plane/${MODULE}"
+#  for module in "${DATAPLANE_MODULES[@]}"; do
+#    MVN_ARGS+=",data-plane/$module"
+#  done
+
+  if ! $(array_contains "--fastBuild" "$@"); then
+    MVN_ARGS+=" -Pnative"
+  fi
+
+#  rm build.log > /dev/null 2>&1 || true
+  MVN_ARGS+=" -Dquarkus.container-image.build=true"
+#  MVN_ARGS+=" -Dquarkus.native.container-build=true"
+  MVN_ARGS+=" -Dquarkus.container-image.push=true"
+#  MVN_ARGS+=" -Dquarkus.container-image.builder=docker"
+  # TODO make all this log suppression configurable
+  echo "Maven args: $MVN_ARGS"
+  # shellcheck disable=SC2086
+  mvn $MVN_ARGS
+  #> build.log
+fi
+
+kubectl -n "$NAMESPACE" delete deployment "${MODULE}" || true
+kubectl -n "$NAMESPACE" apply -f "control-plane/${MODULE}/src/main/resources/config/deployment.yaml"
+if kubectl -n "$NAMESPACE" wait --for=condition=available --timeout=60s "deployment/${MODULE}" ; then
+  echo "DONE"
+else
+  echo "Time out"
+fi

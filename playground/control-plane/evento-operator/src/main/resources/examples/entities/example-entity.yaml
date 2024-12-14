@@ -1,0 +1,10 @@
+apiVersion: evento.dev/v1alpha1
+kind: Entity
+metadata:
+  name: entity-person
+spec:
+  doc: This is a nice entity.
+  fields:
+    - fieldName: name
+      fieldDoc: The legal name of the person.
+      fieldPrimitiveType: type_string

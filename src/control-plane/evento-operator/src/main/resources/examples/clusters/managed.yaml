@@ -1,0 +1,11 @@
+apiVersion: evento.dev/v1alpha1
+kind: Evento
+metadata:
+  name: managed
+spec:
+  messaging:
+    managed:
+      kafka:
+        replicas: 2
+      zookeeper:
+        replicas: 5

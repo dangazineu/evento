@@ -1,0 +1,12 @@
+
+  {
+    "type": "record",
+    "name": "OperationParam",
+    "namespace":"dev.evento",
+    "fields": [
+      {
+        "name": "value",
+        "type": "int"
+      }
+    ]
+  }

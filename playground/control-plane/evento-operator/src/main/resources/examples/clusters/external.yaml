@@ -1,0 +1,8 @@
+apiVersion: evento.dev/v1alpha1
+kind: Evento
+metadata:
+  name: external
+spec:
+  messaging:
+    external:
+      bootstrapServers: some-host:9090

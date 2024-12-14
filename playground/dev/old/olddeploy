@@ -1,0 +1,78 @@
+#!/bin/bash
+
+set -e
+cd "$(dirname "$0")/.."
+source dev/.functions.sh
+
+if [ -z "$QUARKUS_CONTAINER_IMAGE_GROUP" ]; then
+  echo "\$QUARKUS_CONTAINER_IMAGE_GROUP must be set"
+  exit 1
+fi
+if [ -z "$QUARKUS_CONTAINER_IMAGE_USERNAME" ]; then
+  echo "\$QUARKUS_CONTAINER_IMAGE_USERNAME must be set"
+  exit 1
+fi
+if [ -z "$QUARKUS_CONTAINER_IMAGE_PASSWORD" ]; then
+  echo "\$QUARKUS_CONTAINER_IMAGE_PASSWORD must be set"
+  exit 1
+fi
+
+DATAPLANE_MODULES=($(print_dataplane_executable_modules_from_list "$@"))
+if [ "${#DATAPLANE_MODULES[@]}" -eq 0 ]; then
+  DATAPLANE_MODULES=($(print_dataplane_executable_modules))
+fi
+
+NAMESPACE=$(print_namespace "$@")
+RESOURCE_PREFIX=$(print_resource_prefix "$@")
+
+if ! $(array_contains "--skipBuild" "$@"); then
+
+  MVN_ARGS=" clean package -pl .,data-plane"
+  for module in "${DATAPLANE_MODULES[@]}"; do
+    MVN_ARGS+=",data-plane/$module"
+  done
+
+  if ! $(array_contains "--fastBuild" "$@"); then
+    MVN_ARGS+=" -Pnative"
+  fi
+
+  rm build.log > /dev/null 2>&1 || true
+
+  MVN_ARGS+=" -Dquarkus.native.container-build=true"
+  MVN_ARGS+=" -Dquarkus.container-image.push=true"
+  # TODO make all this log suppression configurable
+  echo "Building project. Build output will be written to build.log to reduce verbosity."
+  echo "Maven args: $MVN_ARGS"
+  # shellcheck disable=SC2086
+  mvn $MVN_ARGS > build.log
+fi
+
+for module in "${DATAPLANE_MODULES[@]}"; do
+  kubectl -n "$NAMESPACE" delete deployment "$module" > /dev/null 2>&1 || true
+  kubectl -n "$NAMESPACE" delete service "$module" > /dev/null 2>&1 || true
+
+  deployment_yml="data-plane/$module/target/kubernetes/kubernetes-processed.yml"
+
+  rm "$deployment_yml"  > /dev/null 2>&1 || true
+  cp "data-plane/$module/target/kubernetes/kubernetes.yml" "$deployment_yml"
+
+  sed -i "s/imagePullPolicy: .*/imagePullPolicy: Always/" "$deployment_yml"
+  sed -i "s/replicas: .*/replicas: 1/" "$deployment_yml"
+  sed -i "s/name: $module/name: $RESOURCE_PREFIX-$module/" "$deployment_yml"
+  # TODO delete this once quarkus stops producing this deprecated property
+  sed -i "s/serviceAccount: $module/serviceAccountName: $RESOURCE_PREFIX-$module/" "$deployment_yml"
+  sed -i "s/serviceName: $module/serviceName: $RESOURCE_PREFIX-$module/" "$deployment_yml"
+
+  add_envvar_to_deployment "EVENTS_TOPIC" "$RESOURCE_PREFIX-events" "$module"
+  add_envvar_to_deployment "COMMANDS_TOPIC" "$RESOURCE_PREFIX-commands" "$module"
+  add_envvar_to_deployment "ENTITY_SERVICE_HOST" "$RESOURCE_PREFIX-entity-service" "$module"
+#  add_envvar_to_deployment "COMMANDS_SERVICE" "http:\/\/$RESOURCE_PREFIX-command-service:8080" "$module"
+
+  kubectl -n "$NAMESPACE" apply -f "$deployment_yml" > /dev/null
+done
+
+for module in "${DATAPLANE_MODULES[@]}"; do
+  if kubectl -n "$NAMESPACE" wait --for=condition=available --timeout=60s "deployment/$RESOURCE_PREFIX-$module"  > /dev/null; then
+    echo "$module url is " $(minikube  -n "$NAMESPACE" service "$RESOURCE_PREFIX-$module" --url)
+  fi
+done

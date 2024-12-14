@@ -1,0 +1,39 @@
+# this file is based on the example https://strimzi.io/examples/latest/kafka/kafka-persistent-single.yaml
+# but includes configuration to expose Kafka brokers and bootstrap server as nodeports, so we can connect to them
+# from outside of Kubernetes. This is useful for development mode, where we can just run quarkus:dev and have it connect
+apiVersion: kafka.strimzi.io/v1beta1
+kind: Kafka
+metadata:
+  name: kafka-cluster
+spec:
+  kafka:
+    version: 2.5.0
+    replicas: 1
+    listeners:
+      plain: {}
+      tls: {}
+      # the following block is the only customization in this file
+      external:
+        type: nodeport
+        tls: false
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      log.message.format.version: "2.5"
+    storage:
+      type: jbod
+      volumes:
+        - id: 0
+          type: persistent-claim
+          size: 100Gi
+          deleteClaim: false
+  zookeeper:
+    replicas: 1
+    storage:
+      type: persistent-claim
+      size: 100Gi
+      deleteClaim: false
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}

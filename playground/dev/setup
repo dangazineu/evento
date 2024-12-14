@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# dev/setup: Teardown and recreate evento namespace in Kubernetes, applies relevant operators.
+
+set -e
+cd "$(dirname "$0")/.."
+source dev/.functions.sh
+
+NAMESPACE=$(print_namespace "$@")
+
+echo "Setting up namespace $NAMESPACE"
+if kubectl get namespace "$NAMESPACE" > /dev/null 2>&1; then
+  kubectl delete namespace "$NAMESPACE"
+fi
+
+kubectl create namespace "$NAMESPACE"
+
+# cannot use apply because of an issue with the way k8s manipulated metadata
+# https://github.com/strimzi/strimzi-kafka-operator/issues/4589
+#kubectl -n "$NAMESPACE" apply -f "https://strimzi.io/install/latest?namespace=$NAMESPACE"
+kubectl delete customresourcedefinition --selector=app=strimzi
+kubectl delete clusterrolebindings --selector=app=strimzi
+kubectl delete clusterroles --selector=app=strimzi
+
+# TODO change this to use a static version reference
+kubectl -n "$NAMESPACE" create -f "https://strimzi.io/install/latest?namespace=$NAMESPACE"
+
+curl -sSL https://raw.githubusercontent.com/apicurio/apicurio-registry-operator/master/docs/resources/install.yaml | sed "s/apicurio-registry-operator-namespace/$NAMESPACE/g" | kubectl apply -n "$NAMESPACE" -f -
+
+# these install to the entire cluster
+kubectl apply -f control-plane/evento-operator/src/main/resources/crds/v1alpha1/cluster.yaml
+kubectl apply -f control-plane/evento-operator/src/main/resources/crds/v1alpha1/context.yaml
+kubectl apply -f control-plane/evento-operator/src/main/resources/config/clusterrole.yaml
+
+kubectl apply -f control-plane/evento-operator/src/main/resources/crds/v1alpha2/cluster.yaml
+
+# these are namespace specific
+kubectl -n "$NAMESPACE" apply -f control-plane/evento-operator/src/main/resources/config/serviceaccount.yaml
+cat control-plane/evento-operator/src/main/resources/config/clusterrolebinding.yaml | sed "s/{NAMESPACE}/$NAMESPACE/g" | kubectl apply -n "$NAMESPACE" -f -
+

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -e
+cd "$(dirname "$0")/.."
+source dev/.functions.sh
+
+NAMESPACE=$(print_namespace "$@")
+MODULE="evento-operator"
+
+kubectl -n "$NAMESPACE" delete deployment "${MODULE}" || true
+kubectl -n "$NAMESPACE" delete contexts.evento.dev --all || true
+kubectl -n "$NAMESPACE" delete eventos.evento.dev --all || true

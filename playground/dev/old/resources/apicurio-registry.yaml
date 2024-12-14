@@ -1,0 +1,4 @@
+apiVersion: apicur.io/v1
+kind: ApicurioRegistry
+metadata:
+  name: apicurioregistry

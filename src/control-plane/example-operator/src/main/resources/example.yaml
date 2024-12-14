@@ -1,0 +1,9 @@
+apiVersion: evento.dev/v1alpha1
+kind: Example
+metadata:
+  name: example
+spec:
+  specialRoles:
+    - A
+    - B
+    - C
