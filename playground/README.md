@@ -18,4 +18,3 @@ Current status of the operator development is:
    Does not delete the stuff configured by dev/setup. 
 
 
-https://itnext.io/customresource-improvements-in-fabric8-kubernetesclient-v5-0-0-4aef4d299323
